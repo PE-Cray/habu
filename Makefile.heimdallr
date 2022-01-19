@@ -1,0 +1,20 @@
+# CC = cc 
+CC = cc -fsave-loopmark  -fopenmp
+
+CFLAGS  =
+
+
+all: heimdallr
+
+
+heimdallr: heimdallr.c habu.o habu.h 
+	$(CC) $(CFLAGS) -o heimdallr habu.o heimdallr.c  
+#	$(CC) $(CFLAGS) -o heimdallr heimdallr.c  -lc
+
+habu.o: habu.c  habu.h
+	$(CC) $(CFLAGS) -c habu.c  
+
+	
+clean:
+	rm -f *.o heimdallr
+

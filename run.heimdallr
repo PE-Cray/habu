@@ -1,0 +1,114 @@
+#!/bin/tcsh -x
+#PBS -N heim
+##PBS -q bw44-sm
+##PBS -q bw44-lg
+##PBS -l walltime=10:00
+##PBS -l walltime=120:00
+##PBS -l place=scatter,select=512:nodetype=BW36
+##PBS -l place=scatter,select=4
+##PBS -l place=scatter,select=128:clockmhz=2300:nodetype=BW36
+##PBS -l place=scatter,select=32:clockmhz=2300:nodetype=BW36
+#PBS -l place=scatter,select=16:clockmhz=2300:nodetype=BW36
+##PBS -l place=scatter,select=4:clockmhz=2300:nodetype=BW36
+##PBS -l place=scatter,select=1
+#PBS -j oe
+
+cd $PBS_O_WORKDIR
+module unload craype-hugepages8M 
+# module swap craype-hugepages8M craype-hugepages2M
+#module swap craype-hugepages8M craype-hugepages16M
+#module swap pmi pmi/5.0.15
+#module unload atp totalview perftools-base
+#module load cray-shmem
+module list
+
+#module load cray-openshmemx
+#setenv LD_LIBRARY_PATH $CRAY_LD_LIBRARY_PATH\:$LD_LIBRARY_PATH
+
+
+# This benchmark is meant to be run most often on a single cpu,
+# half of the cpus of a numa domain, all of the cpus
+# of a numa domain, and then all of the cpus across
+# the full shared domain.
+# Other configurations may be interesting depending on 
+# the processor.  
+#
+# It is very common for one to place 1 MPI rank on every cpu
+# of a numa domain.  If one runs with pure MPI then one would expect 
+# to not get any "wrong" answers even without using atomics.
+
+
+#foreach ncore (1  2 4 8 16)
+#foreach ncore (1  )
+#foreach ncore (72  )
+#foreach ncore (144  )
+#foreach ncore (144 143 142 140 136 )
+#foreach ncore (16  )
+#foreach ncore (45  )
+#foreach ncore (4608  )
+foreach ncore (576  )
+#foreach ncore ( 18432 )
+	# foreach ncore (72)
+	# foreach ncore (4  )
+	# foreach ncore (2   )
+setenv file output.$ncore
+echo $file
+rm $file
+@ nt = 1
+foreach nthreads (1 2     )
+#foreach nthreads (  2   )
+#foreach nthreads (  1 )
+	#foreach nthreads (1 2 9  18 )
+
+@ nt = $nt + 1
+echo nt
+#@ nthreads = ( 1 << $nt )
+echo $nthreads
+@ nr = $ncore / $nthreads
+echo $nr
+@ symsize = $nthreads * ( 2 << 29 )
+echo $symsize
+#@ tsize = $nt + 15 
+@ tsize = $nt + 20 
+#@ tsize = $nt + 10 
+#@ nu  = $tsize - 2 
+@ nu  = $tsize  
+setenv OMP_NUM_THREADS $nthreads
+#setenv OMP_NUM_THREADS 9
+setenv SHMEM_MAX_NUM_THREADS $nthreads
+setenv SHMEM_SYMMETRIC_SIZE $symsize
+echo $SHMEM_SYMMETRIC_SIZE
+echo $tsize
+
+#foreach hugepage (craype-hugepages8M craype-hugepages2M)
+#foreach hugepage (craype-hugepages8M )
+foreach hugepage (craype-hugepages2M )
+module load $hugepage
+# The arguments control the size of the table and the number of updates
+# For example, if the first argument is 26 the size of the table will be 2^26*8 = 0.5 GiB
+# and if the second argument is 25 each rank will execute 2^25 updates distribute across all threads.
+# The total memory footprint will be the table size plus the number of updates times 8 bytes.
+# The program simple replicates the full table and updates on each mpi rank.
+
+# The spirit of the benchmark is that when running using all of the CPUs in a NUMA domain 
+# that the size of the table consume significantly more space that is available
+# in the last level cache.
+
+# aprun -n$nr  -d$nthreads  ./heimdallr 15 6     >>! $file 
+# aprun -n$nr  -d$nthreads  ./heimdallr 15 2     >>! $file 
+#aprun -n8 -d$nthreads -cc depth  ./heimdallr 15 2     >>! $file 
+# aprun -n1 -d$nthreads -cc depth  ./heimdallr 15 10     >>! $file 
+#aprun -n$nr  -d$nthreads  -cc depth ./heimdallr -t $tsize -n $nu -G -128   -W 1024 -T  ATOMIC_INC -T HABU_INC >>!  $file 
+aprun -n$nr  -d$nthreads  -cc depth ./heimdallr -t $tsize -n $nu -G -128   -W 2048  -T ALL  >>!  $file 
+# aprun -n$nr  -d$nthreads  -cc depth ./heimdallr -t $tsize -n $nu -G -128   -W 1024 -T  HABU_INC -T ATOMIC_INC >>!  $file 
+# aprun -n$nr  -d$nthreads  -cc depth ./heimdallr $tsize 15     >>!  $file 
+#aprun -n$nrank  -d$nthreads  ./heimdallr 28 26     > $file 
+
+
+
+module unload $hugepage
+end
+end
+end
+cat $file
+#qsub run.heimdallr
